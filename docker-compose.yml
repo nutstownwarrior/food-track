@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: kalotrack-backend
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - JWT_SECRET=${JWT_SECRET:-change-this-in-production}
+      - PORT=3001
+      - DB_PATH=/app/data/kalotrack.db
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost}
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+    networks:
+      - kalotrack-net
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: kalotrack-frontend
+    ports:
+      - "${PORT:-80}:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - kalotrack-net
+
+networks:
+  kalotrack-net:
+    driver: bridge
