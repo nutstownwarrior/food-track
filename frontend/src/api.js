@@ -44,6 +44,12 @@ export const api = {
   // AI
   analyzePhoto: (image, mimeType) =>
     request('/ai/analyze', { method: 'POST', body: JSON.stringify({ image, mimeType }) }),
+
+  // Activity
+  getActivity: (date) => request(`/activity?date=${date}`),
+  addActivity: (entry) => request('/activity', { method: 'POST', body: JSON.stringify(entry) }),
+  importActivity: (entries) => request('/activity/import', { method: 'POST', body: JSON.stringify({ entries }) }),
+  deleteActivity: (id) => request(`/activity/${id}`, { method: 'DELETE' }),
 };
 
 export { getToken };

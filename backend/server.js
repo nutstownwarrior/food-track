@@ -17,6 +17,7 @@ app.use('/api/user', require('./routes/user'));
 app.use('/api/food', require('./routes/food'));
 app.use('/api/weight', require('./routes/weight'));
 app.use('/api/ai', require('./routes/ai'));
+app.use('/api/activity', require('./routes/activity'));
 
 // Health check
 app.get('/api/health', (req, res) => res.json({ status: 'ok', app: 'KaloTrack' }));

@@ -57,6 +57,7 @@ export default function Dashboard({ onGoalsLoad }) {
   const [userData, setUserData] = useState(null)
   const [foodData, setFoodData] = useState(null)
   const [weights, setWeights] = useState([])
+  const [activityData, setActivityData] = useState(null)
   const [loading, setLoading] = useState(true)
   const today = new Date().toISOString().slice(0, 10)
 
@@ -66,14 +67,16 @@ export default function Dashboard({ onGoalsLoad }) {
 
   async function loadAll() {
     try {
-      const [user, food, w] = await Promise.all([
+      const [user, food, w, activity] = await Promise.all([
         api.getUser(),
         api.getFood(today),
         api.getWeight(),
+        api.getActivity(today),
       ])
       setUserData(user)
       setFoodData(food)
       setWeights(w.slice(0, 7).reverse())
+      setActivityData(activity)
       if (onGoalsLoad && user.goals) onGoalsLoad(user.goals)
     } catch (err) {
       console.error(err)
@@ -90,7 +93,9 @@ export default function Dashboard({ onGoalsLoad }) {
   const profile = userData?.profile
   const displayName = profile?.display_name || localStorage.getItem('username') || 'Benutzer'
   const consumed = foodData?.totals?.calories || 0
-  const calorieGoal = goals?.calorie_goal || 0
+  const baseCalorieGoal = goals?.calorie_goal || 0
+  const activeCaloriesToday = activityData?.totals?.active_calories || 0
+  const calorieGoal = baseCalorieGoal + activeCaloriesToday
   const remaining = calorieGoal - consumed
   const proteinGoal = goals?.protein_goal_g || 0
 
@@ -129,6 +134,11 @@ export default function Dashboard({ onGoalsLoad }) {
             <div className="text-sm text-gray-500">
               {remaining < 0 ? 'überzogen' : 'noch verfügbar'}
             </div>
+            {activeCaloriesToday > 0 && (
+              <div className="mt-2 text-xs text-orange-600 bg-orange-50 rounded px-2 py-1">
+                🏃 +{activeCaloriesToday} kcal Aktivität
+              </div>
+            )}
             {goals?.warning_high_deficit && (
               <div className="mt-2 text-xs text-amber-600 bg-amber-50 rounded px-2 py-1">
                 ⚠️ Großes Kaloriendefizit
