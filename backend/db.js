@@ -58,21 +58,6 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_food_entries_user_date ON food_entries(user_id, date);
   CREATE INDEX IF NOT EXISTS idx_weight_log_user ON weight_log(user_id, logged_at);
-
-  CREATE TABLE IF NOT EXISTS activity_entries (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    date TEXT NOT NULL,
-    source TEXT DEFAULT 'manual',
-    type TEXT DEFAULT 'workout',
-    name TEXT,
-    active_calories INTEGER DEFAULT 0,
-    steps INTEGER DEFAULT 0,
-    duration_min INTEGER DEFAULT 0,
-    created_at TEXT DEFAULT (datetime('now'))
-  );
-
-  CREATE INDEX IF NOT EXISTS idx_activity_entries_user_date ON activity_entries(user_id, date);
 `);
 
 module.exports = db;

@@ -5,12 +5,10 @@ import Dashboard from './components/Dashboard'
 import FoodLog from './components/FoodLog'
 import Profile from './components/Profile'
 import Goals from './components/Goals'
-import ActivityTracker from './components/ActivityTracker'
 
 const TABS = [
   { id: 'dashboard', label: 'Übersicht', icon: '📊' },
   { id: 'food', label: 'Tagebuch', icon: '🥗' },
-  { id: 'activity', label: 'Aktivität', icon: '🏃' },
   { id: 'profile', label: 'Profil', icon: '👤' },
   { id: 'goals', label: 'Ziele', icon: '🎯' },
 ]
@@ -56,7 +54,6 @@ export default function App() {
       <main className="flex-1 overflow-y-auto pb-20">
         {activeTab === 'dashboard' && <Dashboard onGoalsLoad={setUserGoals} />}
         {activeTab === 'food' && <FoodLog goals={userGoals} />}
-        {activeTab === 'activity' && <ActivityTracker />}
         {activeTab === 'profile' && <Profile />}
         {activeTab === 'goals' && <Goals onGoalsUpdate={setUserGoals} />}
       </main>
