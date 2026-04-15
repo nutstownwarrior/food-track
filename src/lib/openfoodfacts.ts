@@ -9,13 +9,19 @@ export interface OFFProduct {
   barcode?: string
 }
 
-function parseProduct(p: Record<string, unknown>): OFFProduct | null {
+function parseProduct(p: Record<string, unknown>, lang = 'en'): OFFProduct | null {
   const nutriments = (p.nutriments ?? {}) as Record<string, unknown>
   const calories = Number(nutriments['energy-kcal_100g'] ?? nutriments['energy-kcal'] ?? 0)
   if (!calories) return null
+
+  // Prefer localised name, fall back to generic product_name
+  const localName = String(p[`product_name_${lang}`] ?? '')
+  const name = (localName || String(p.product_name ?? p.product_name_en ?? '')).trim()
+  if (!name) return null
+
   return {
     id: String(p.code ?? p.id ?? ''),
-    name: String(p.product_name ?? p.product_name_en ?? ''),
+    name,
     brand: String(p.brands ?? ''),
     calories_per_100g: calories,
     protein_per_100g: Number(nutriments.proteins_100g ?? 0),
@@ -25,27 +31,29 @@ function parseProduct(p: Record<string, unknown>): OFFProduct | null {
   }
 }
 
-export async function searchFoods(query: string, page = 1): Promise<OFFProduct[]> {
+export async function searchFoods(query: string, page = 1, lang = 'en'): Promise<OFFProduct[]> {
   const url = new URL('https://world.openfoodfacts.org/cgi/search.pl')
   url.searchParams.set('search_terms', query)
   url.searchParams.set('search_simple', '1')
   url.searchParams.set('action', 'process')
   url.searchParams.set('json', '1')
+  url.searchParams.set('lc', lang)
   url.searchParams.set('page', String(page))
   url.searchParams.set('page_size', '20')
-  url.searchParams.set('fields', 'code,product_name,product_name_en,brands,nutriments')
+  url.searchParams.set('fields', `code,product_name,product_name_${lang},product_name_en,brands,nutriments`)
 
   const res = await fetch(url.toString())
   if (!res.ok) throw new Error('OpenFoodFacts search failed')
   const data = await res.json() as { products?: Record<string, unknown>[] }
-  return (data.products ?? []).map(parseProduct).filter(Boolean) as OFFProduct[]
+  return (data.products ?? []).map(p => parseProduct(p, lang)).filter(Boolean) as OFFProduct[]
 }
 
-export async function lookupBarcode(barcode: string): Promise<OFFProduct | null> {
-  const url = `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(barcode)}.json?fields=code,product_name,product_name_en,brands,nutriments`
+export async function lookupBarcode(barcode: string, lang = 'en'): Promise<OFFProduct | null> {
+  const fields = `code,product_name,product_name_${lang},product_name_en,brands,nutriments`
+  const url = `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(barcode)}.json?lc=${lang}&fields=${fields}`
   const res = await fetch(url)
   if (!res.ok) return null
   const data = await res.json() as { status: number; product?: Record<string, unknown> }
   if (data.status !== 1 || !data.product) return null
-  return parseProduct({ ...data.product, code: barcode })
+  return parseProduct({ ...data.product, code: barcode }, lang)
 }

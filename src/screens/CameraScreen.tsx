@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react'
 import { estimateFromImage, fileToBase64, type GeminiEstimate } from '../lib/gemini'
 import { getGeminiKey, addLogEntry } from '../lib/db'
+import { useI18n } from '../lib/i18n'
 
 interface Props {
   onDone: () => void
@@ -11,6 +12,7 @@ interface EditableEstimate extends GeminiEstimate {
 }
 
 export default function CameraScreen({ onDone }: Props) {
+  const { t, lang } = useI18n()
   const [preview, setPreview] = useState<string | null>(null)
   const [file, setFile] = useState<File | null>(null)
   const [estimates, setEstimates] = useState<EditableEstimate[]>([])
@@ -34,14 +36,15 @@ export default function CameraScreen({ onDone }: Props) {
     try {
       const apiKey = await getGeminiKey()
       const { base64, mimeType } = await fileToBase64(file)
-      const results = await estimateFromImage(apiKey, base64, mimeType)
+      const results = await estimateFromImage(apiKey, base64, mimeType, lang)
       if (results.length === 0) {
-        setError('Gemini could not identify any food in the image. Try a clearer photo.')
+        setError(t.cam_no_food)
       } else {
         setEstimates(results.map(r => ({ ...r, selected: true })))
       }
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Analysis failed')
+      const msg = err instanceof Error ? err.message : String(err)
+      setError(msg.includes('No Gemini') ? t.cam_no_key : msg)
     } finally {
       setLoading(false)
     }
@@ -79,12 +82,11 @@ export default function CameraScreen({ onDone }: Props) {
     <div className="px-4 pt-6 pb-4 space-y-4">
       <div className="flex items-center gap-3">
         <button onClick={onDone} className="text-slate-400 hover:text-white text-2xl">←</button>
-        <h1 className="text-xl font-bold">AI Food Scan</h1>
+        <h1 className="text-xl font-bold">{t.cam_title}</h1>
       </div>
 
-      <p className="text-slate-400 text-sm">Take or upload a photo of your meal. AI will estimate the calories and macros.</p>
+      <p className="text-slate-400 text-sm">{t.cam_subtitle}</p>
 
-      {/* Image picker */}
       <input
         ref={fileRef}
         type="file"
@@ -95,16 +97,14 @@ export default function CameraScreen({ onDone }: Props) {
       />
 
       {!preview ? (
-        <div className="space-y-3">
-          <button
-            onClick={() => fileRef.current?.click()}
-            className="w-full bg-slate-800 border-2 border-dashed border-slate-600 hover:border-green-500 rounded-2xl py-12 flex flex-col items-center gap-2 transition"
-          >
-            <span className="text-4xl">📷</span>
-            <span className="font-semibold">Take Photo or Upload</span>
-            <span className="text-slate-400 text-sm">Tap to open camera</span>
-          </button>
-        </div>
+        <button
+          onClick={() => fileRef.current?.click()}
+          className="w-full bg-slate-800 border-2 border-dashed border-slate-600 hover:border-green-500 rounded-2xl py-12 flex flex-col items-center gap-2 transition"
+        >
+          <span className="text-4xl">📷</span>
+          <span className="font-semibold">{t.cam_pick_button}</span>
+          <span className="text-slate-400 text-sm">{t.cam_pick_hint}</span>
+        </button>
       ) : (
         <div className="space-y-4">
           <div className="relative">
@@ -122,27 +122,29 @@ export default function CameraScreen({ onDone }: Props) {
               onClick={handleAnalyse}
               className="w-full bg-green-600 hover:bg-green-500 py-3 rounded-xl font-semibold transition"
             >
-              🤖 Analyse with AI
+              {t.cam_analyse}
             </button>
           )}
 
           {loading && (
             <div className="text-center py-6 space-y-2">
               <p className="text-2xl animate-pulse">🤖</p>
-              <p className="text-slate-400">Analysing image…</p>
+              <p className="text-slate-400">{t.cam_analysing}</p>
             </div>
           )}
 
           {error && (
             <div className="bg-red-900/30 border border-red-700 rounded-xl px-4 py-3">
               <p className="text-red-300 text-sm">{error}</p>
-              <button onClick={() => fileRef.current?.click()} className="text-red-400 underline text-sm mt-1">Try another photo</button>
+              <button onClick={() => fileRef.current?.click()} className="text-red-400 underline text-sm mt-1">
+                {t.cam_try_again}
+              </button>
             </div>
           )}
 
           {estimates.length > 0 && (
             <div className="space-y-3">
-              <p className="font-semibold text-slate-300">Review estimates — tap to toggle, adjust quantities</p>
+              <p className="font-semibold text-slate-300">{t.cam_review}</p>
               {estimates.map((item, i) => {
                 const cal = Math.round(item.calories_per_100g * item.quantity_g / 100)
                 return (
@@ -165,7 +167,7 @@ export default function CameraScreen({ onDone }: Props) {
                       </div>
                     </div>
                     <div className="mt-2 flex items-center gap-2" onClick={e => e.stopPropagation()}>
-                      <label className="text-xs text-slate-400">Qty (g):</label>
+                      <label className="text-xs text-slate-400">{t.cam_qty_label}</label>
                       <input
                         type="number"
                         value={item.quantity_g}
@@ -182,7 +184,7 @@ export default function CameraScreen({ onDone }: Props) {
                 onClick={() => fileRef.current?.click()}
                 className="w-full bg-slate-700 hover:bg-slate-600 py-3 rounded-xl text-sm transition"
               >
-                📷 Try Different Photo
+                {t.cam_try_again}
               </button>
 
               <button
@@ -190,7 +192,7 @@ export default function CameraScreen({ onDone }: Props) {
                 disabled={selectedCount === 0}
                 className="w-full bg-green-600 hover:bg-green-500 disabled:opacity-50 py-3 rounded-xl font-semibold transition"
               >
-                Log {selectedCount} item{selectedCount !== 1 ? 's' : ''}
+                {t.cam_log_items(selectedCount)}
               </button>
             </div>
           )}
@@ -198,10 +200,7 @@ export default function CameraScreen({ onDone }: Props) {
       )}
 
       <div className="bg-slate-800 rounded-xl px-4 py-3">
-        <p className="text-xs text-slate-400">
-          <span className="text-yellow-400">⚠️ AI estimates</span> — actual calories may vary. Always check the quantity and adjust if needed.
-          Powered by Google Gemini. Requires a Google AI Studio API key in Settings.
-        </p>
+        <p className="text-xs text-slate-400">{t.cam_disclaimer}</p>
       </div>
     </div>
   )

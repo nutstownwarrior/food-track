@@ -11,16 +11,10 @@ export interface GeminiEstimate {
 const MODEL = 'gemini-3-flash-preview'
 const API_BASE = 'https://generativelanguage.googleapis.com/v1beta'
 
-export async function estimateFromImage(
-  apiKey: string,
-  imageBase64: string,
-  mimeType: string
-): Promise<GeminiEstimate[]> {
-  if (!apiKey) throw new Error('No Gemini API key configured. Add it in Settings.')
-
-  const systemPrompt = `You are a nutrition expert. Analyse the food visible in the image.
+const PROMPTS: Record<string, string> = {
+  en: `You are a nutrition expert. Analyse the food visible in the image.
 For each distinct food item or dish, return a JSON array of objects with these exact keys:
-- name (string): clear food name
+- name (string): clear food name in English
 - quantity_desc (string): portion description e.g. "1 medium apple", "200g rice"
 - quantity_g (number): estimated weight in grams
 - calories_per_100g (number): estimated kcal per 100g
@@ -29,7 +23,31 @@ For each distinct food item or dish, return a JSON array of objects with these e
 - fat_per_100g (number): estimated fat grams per 100g
 
 Return ONLY the JSON array with no markdown, no code fences, no explanation.
-Base your estimates on standard nutritional databases. Be conservative with portion sizes.`
+Base your estimates on standard nutritional databases. Be conservative with portion sizes.`,
+
+  de: `Du bist ein Ernährungsexperte. Analysiere die Lebensmittel auf dem Bild.
+Gib für jedes erkennbare Lebensmittel oder Gericht ein JSON-Array mit folgenden Feldern zurück:
+- name (string): klare Lebensmittelbezeichnung auf Deutsch
+- quantity_desc (string): Portionsbeschreibung, z.B. "1 mittelgroßer Apfel", "200g Reis"
+- quantity_g (number): geschätztes Gewicht in Gramm
+- calories_per_100g (number): geschätzte kcal pro 100g
+- protein_per_100g (number): geschätzte Proteinmenge in Gramm pro 100g
+- carbs_per_100g (number): geschätzte Kohlenhydratmenge in Gramm pro 100g
+- fat_per_100g (number): geschätzte Fettmenge in Gramm pro 100g
+
+Gib NUR das JSON-Array zurück, ohne Markdown, ohne Code-Blöcke, ohne Erklärungen.
+Stütze deine Schätzungen auf gängige Nährwertdatenbanken. Sei bei den Portionsgrößen eher konservativ.`,
+}
+
+export async function estimateFromImage(
+  apiKey: string,
+  imageBase64: string,
+  mimeType: string,
+  language = 'en'
+): Promise<GeminiEstimate[]> {
+  if (!apiKey) throw new Error('No Gemini API key configured. Add it in Settings.')
+
+  const systemPrompt = PROMPTS[language] ?? PROMPTS.en
 
   const body = {
     contents: [

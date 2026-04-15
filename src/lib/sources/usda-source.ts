@@ -51,7 +51,7 @@ export const usdaSource: FoodSource = {
   label: 'USDA FoodData Central',
   requiresApiKey: true,
 
-  async search(query, apiKey): Promise<FoodResult[]> {
+  async search(query, apiKey, _language): Promise<FoodResult[]> {
     if (!apiKey) return []
 
     const url = new URL(`${API_BASE}/foods/search`)

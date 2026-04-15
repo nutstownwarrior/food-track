@@ -6,8 +6,8 @@ export const offSource: FoodSource = {
   label: 'OpenFoodFacts',
   requiresApiKey: false,
 
-  async search(query): Promise<FoodResult[]> {
-    const products = await searchFoods(query)
+  async search(query, _apiKey, language): Promise<FoodResult[]> {
+    const products = await searchFoods(query, 1, language)
     return products.map(p => ({
       key: `off:${p.id || p.barcode || p.name}`,
       name: p.name,
@@ -22,8 +22,8 @@ export const offSource: FoodSource = {
     }))
   },
 
-  async lookupBarcode(barcode): Promise<FoodResult | null> {
-    const p = await lookupBarcode(barcode)
+  async lookupBarcode(barcode, _apiKey, language): Promise<FoodResult | null> {
+    const p = await lookupBarcode(barcode, language)
     if (!p) return null
     return {
       key: `off:${p.barcode}`,

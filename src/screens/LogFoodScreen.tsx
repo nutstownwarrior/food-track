@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { db, addLogEntry, getSetting } from '../lib/db'
 import { searchAll, lookupBarcodeAll, type FoodResult } from '../lib/search'
 import { useLiveQuery } from 'dexie-react-hooks'
+import { useI18n } from '../lib/i18n'
 import type { Food } from '../lib/db'
 
 interface Props {
@@ -11,12 +12,12 @@ interface Props {
 
 type Tab = 'search' | 'custom'
 
-// Colours per source label shown as a small badge
 const SOURCE_COLORS: Record<string, string> = {
   'OpenFoodFacts': 'bg-orange-900/60 text-orange-300',
   'USDA':          'bg-blue-900/60 text-blue-300',
   'BLS':           'bg-green-900/60 text-green-300',
   'My Foods':      'bg-purple-900/60 text-purple-300',
+  'Meine Lebensmittel': 'bg-purple-900/60 text-purple-300',
 }
 
 function SourceBadge({ label }: { label: string }) {
@@ -24,13 +25,14 @@ function SourceBadge({ label }: { label: string }) {
   return <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${cls}`}>{label}</span>
 }
 
-type FoodItem = FoodResult | (Food & { sourceLabel: string })
+type FoodItem = FoodResult | (Food & { key: string; sourceLabel: string })
 
-function toFoodItem(f: Food): FoodItem {
-  return { ...f, key: `local:${f.id}`, source: 'local', sourceLabel: 'My Foods' }
+function toFoodItem(f: Food, myFoodsLabel: string): FoodItem {
+  return { ...f, key: `local:${f.id}`, source: 'local', sourceLabel: myFoodsLabel }
 }
 
 function ProductCard({ p, onAdd }: { p: FoodItem; onAdd: (p: FoodItem) => void }) {
+  const { t } = useI18n()
   return (
     <div className="flex items-center gap-3 bg-slate-800 rounded-xl px-4 py-3">
       <div className="flex-1 min-w-0">
@@ -41,14 +43,15 @@ function ProductCard({ p, onAdd }: { p: FoodItem; onAdd: (p: FoodItem) => void }
         {p.brand && <p className="text-xs text-slate-400 truncate">{p.brand}</p>}
         <p className="text-xs text-slate-400 mt-0.5">
           {p.calories_per_100g} kcal · P {p.protein_per_100g}g · C {p.carbs_per_100g}g · F {p.fat_per_100g}g
-          <span className="text-slate-500"> /100g</span>
+          <span className="text-slate-500"> {t.log_per_100g}</span>
         </p>
       </div>
       <button
         onClick={() => onAdd(p)}
         className="bg-green-600 hover:bg-green-500 text-white text-sm font-semibold px-3 py-1.5 rounded-lg transition shrink-0"
       >
-        Add
+        {/* "Add" is the same in both languages contextually, but use t key anyway */}
+        +
       </button>
     </div>
   )
@@ -61,11 +64,12 @@ interface QuantityModalProps {
 }
 
 function QuantityModal({ item, onConfirm, onCancel }: QuantityModalProps) {
+  const { t } = useI18n()
   const [qty, setQty] = useState('100')
   const inputRef = useRef<HTMLInputElement>(null)
   useEffect(() => { inputRef.current?.focus(); inputRef.current?.select() }, [])
 
-  const g = Number(qty)
+  const g   = Number(qty)
   const cal = g > 0 ? Math.round(item.calories_per_100g * g / 100) : 0
 
   return (
@@ -76,7 +80,7 @@ function QuantityModal({ item, onConfirm, onCancel }: QuantityModalProps) {
           {item.brand && <p className="text-sm text-slate-400">{item.brand}</p>}
         </div>
         <div>
-          <label className="text-sm text-slate-400 block mb-1">Quantity (grams)</label>
+          <label className="text-sm text-slate-400 block mb-1">{t.log_qty_label}</label>
           <input
             ref={inputRef}
             type="number"
@@ -95,13 +99,13 @@ function QuantityModal({ item, onConfirm, onCancel }: QuantityModalProps) {
           </p>
         )}
         <div className="flex gap-3">
-          <button onClick={onCancel} className="flex-1 bg-slate-700 py-3 rounded-xl font-semibold">Cancel</button>
+          <button onClick={onCancel} className="flex-1 bg-slate-700 py-3 rounded-xl font-semibold">{t.log_cancel}</button>
           <button
             onClick={() => g > 0 && onConfirm(g)}
             disabled={!(g > 0)}
             className="flex-1 bg-green-600 hover:bg-green-500 disabled:opacity-50 py-3 rounded-xl font-semibold transition"
           >
-            Log It
+            {t.log_log_it}
           </button>
         </div>
       </div>
@@ -110,26 +114,31 @@ function QuantityModal({ item, onConfirm, onCancel }: QuantityModalProps) {
 }
 
 async function getApiKeys(): Promise<Record<string, string>> {
-  const [usda] = await Promise.all([
+  const [usda, bls] = await Promise.all([
     getSetting('usda_api_key'),
+    getSetting('bls_api_key'),
   ])
   return {
     usda: String(usda ?? ''),
+    bls:  String(bls  ?? ''),
   }
 }
 
 export default function LogFoodScreen({ onDone }: Props) {
-  const [tab, setTab] = useState<Tab>('search')
-  const [query, setQuery] = useState('')
+  const { t, lang } = useI18n()
+  const [tab, setTab]         = useState<Tab>('search')
+  const [query, setQuery]     = useState('')
   const [results, setResults] = useState<FoodResult[]>([])
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
+  const [error, setError]     = useState('')
   const [pending, setPending] = useState<FoodItem | null>(null)
-
-  const [cf, setCf] = useState({ name: '', brand: '', calories: '', protein: '', carbs: '', fat: '' })
   const [cfSaved, setCfSaved] = useState(false)
 
+  const [cf, setCf] = useState({ name: '', brand: '', calories: '', protein: '', carbs: '', fat: '' })
+
   const customFoods = useLiveQuery(() => db.foods.orderBy('name').toArray(), [])
+
+  const myFoodsLabel = t.log_my_foods_label
 
   async function handleSearch() {
     if (!query.trim()) return
@@ -137,31 +146,31 @@ export default function LogFoodScreen({ onDone }: Props) {
     setError('')
     try {
       const apiKeys = await getApiKeys()
-      const res = await searchAll(query, { apiKeys })
+      const res = await searchAll(query, { apiKeys, language: lang })
       setResults(res)
-      if (res.length === 0) setError('No results found. Try different keywords.')
+      if (res.length === 0) setError(t.log_no_results)
     } catch {
-      setError('Search failed. Check your connection.')
+      setError(t.log_search_failed)
     } finally {
       setLoading(false)
     }
   }
 
   async function handleBarcodeScan() {
-    const code = prompt('Enter barcode number:')
+    const code = prompt(t.log_barcode_prompt)
     if (!code) return
     setLoading(true)
     setError('')
     try {
       const apiKeys = await getApiKeys()
-      const product = await lookupBarcodeAll(code.trim(), { apiKeys })
+      const product = await lookupBarcodeAll(code.trim(), { apiKeys, language: lang })
       if (product) {
         setResults([product])
       } else {
-        setError('Barcode not found')
+        setError(t.log_barcode_not_found)
       }
     } catch {
-      setError('Barcode lookup failed.')
+      setError(t.log_barcode_failed)
     } finally {
       setLoading(false)
     }
@@ -180,7 +189,6 @@ export default function LogFoodScreen({ onDone }: Props) {
       source: 'search',
     })
 
-    // Cache result locally so it appears in "My Foods" and works offline
     const barcode = (pending as FoodResult).barcode
     if (barcode) {
       const exists = await db.foods.where('barcode').equals(barcode).first()
@@ -193,7 +201,7 @@ export default function LogFoodScreen({ onDone }: Props) {
           carbs_per_100g: pending.carbs_per_100g,
           fat_per_100g: pending.fat_per_100g,
           barcode,
-          source: (pending as FoodResult).source === 'usda' ? 'custom' : 'openfoodfacts',
+          source: 'openfoodfacts',
           created_at: Date.now(),
         })
       }
@@ -220,28 +228,35 @@ export default function LogFoodScreen({ onDone }: Props) {
     setTimeout(() => setCfSaved(false), 2000)
   }
 
-  // Local foods filtered by current query
   const localMatches = query.trim()
     ? (customFoods ?? []).filter(f => f.name.toLowerCase().includes(query.toLowerCase()))
     : []
+
+  const customFields = [
+    { key: 'name',     label: t.log_field_name,     type: 'text',   placeholder: t.log_field_name_ph },
+    { key: 'brand',    label: t.log_field_brand,    type: 'text',   placeholder: t.log_field_brand_ph },
+    { key: 'calories', label: t.log_field_calories, type: 'number', placeholder: '0' },
+    { key: 'protein',  label: t.log_field_protein,  type: 'number', placeholder: '0' },
+    { key: 'carbs',    label: t.log_field_carbs,    type: 'number', placeholder: '0' },
+    { key: 'fat',      label: t.log_field_fat,      type: 'number', placeholder: '0' },
+  ]
 
   return (
     <div className="px-4 pt-6 pb-4 space-y-4">
       <div className="flex items-center gap-3">
         <button onClick={onDone} className="text-slate-400 hover:text-white text-2xl">←</button>
-        <h1 className="text-xl font-bold">Add Food</h1>
+        <h1 className="text-xl font-bold">{t.log_title}</h1>
       </div>
 
-      {/* Tabs */}
       <div className="flex bg-slate-800 rounded-xl p-1 gap-1">
-        {(['search', 'custom'] as Tab[]).map(t => (
+        {(['search', 'custom'] as Tab[]).map(tab_ => (
           <button
-            key={t}
-            onClick={() => setTab(t)}
+            key={tab_}
+            onClick={() => setTab(tab_)}
             className={`flex-1 py-2 rounded-lg text-sm font-semibold transition
-              ${tab === t ? 'bg-green-600 text-white' : 'text-slate-400'}`}
+              ${tab === tab_ ? 'bg-green-600 text-white' : 'text-slate-400'}`}
           >
-            {t === 'search' ? '🔍 Search' : '✏️ Custom'}
+            {tab_ === 'search' ? t.log_tab_search : t.log_tab_custom}
           </button>
         ))}
       </div>
@@ -251,7 +266,7 @@ export default function LogFoodScreen({ onDone }: Props) {
           <div className="flex gap-2">
             <input
               type="search"
-              placeholder="e.g. chicken breast, apple, yogurt..."
+              placeholder={t.log_search_placeholder}
               value={query}
               onChange={e => setQuery(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleSearch()}
@@ -262,12 +277,12 @@ export default function LogFoodScreen({ onDone }: Props) {
               disabled={loading}
               className="bg-green-600 hover:bg-green-500 disabled:opacity-50 px-4 rounded-xl font-semibold transition"
             >
-              {loading ? '…' : 'Go'}
+              {loading ? t.log_search_loading : t.log_search_go}
             </button>
             <button
               onClick={handleBarcodeScan}
               className="bg-slate-700 hover:bg-slate-600 px-3 rounded-xl transition text-xl"
-              title="Enter barcode"
+              title={t.log_barcode_title}
             >
               📦
             </button>
@@ -275,9 +290,8 @@ export default function LogFoodScreen({ onDone }: Props) {
 
           {error && <p className="text-red-400 text-sm">{error}</p>}
 
-          {/* Local matches shown above remote results */}
           {localMatches.map(f => (
-            <ProductCard key={`local-${f.id}`} p={toFoodItem(f)} onAdd={p => setPending(p)} />
+            <ProductCard key={`local-${f.id}`} p={toFoodItem(f, myFoodsLabel)} onAdd={p => setPending(p)} />
           ))}
 
           {results.map(p => (
@@ -286,14 +300,12 @@ export default function LogFoodScreen({ onDone }: Props) {
 
           {!query && (
             <div className="space-y-2">
-              <p className="text-slate-500 text-xs uppercase tracking-wide font-semibold">Recent / saved foods</p>
+              <p className="text-slate-500 text-xs uppercase tracking-wide font-semibold">{t.log_recent_label}</p>
               {(customFoods ?? []).slice(-10).reverse().map(f => (
-                <ProductCard key={`recent-${f.id}`} p={toFoodItem(f)} onAdd={p => setPending(p)} />
+                <ProductCard key={`recent-${f.id}`} p={toFoodItem(f, myFoodsLabel)} onAdd={p => setPending(p)} />
               ))}
               {(customFoods ?? []).length === 0 && (
-                <p className="text-slate-500 text-sm text-center py-4">
-                  Search above — results from USDA (generic foods) and OpenFoodFacts (packaged products) will appear here.
-                </p>
+                <p className="text-slate-500 text-sm text-center py-4">{t.log_recent_empty}</p>
               )}
             </div>
           )}
@@ -302,15 +314,8 @@ export default function LogFoodScreen({ onDone }: Props) {
 
       {tab === 'custom' && (
         <div className="space-y-3">
-          <p className="text-slate-400 text-sm">Add a custom food to your local database</p>
-          {[
-            { key: 'name',     label: 'Name *',                  type: 'text',   placeholder: 'e.g. Chicken breast' },
-            { key: 'brand',    label: 'Brand',                   type: 'text',   placeholder: 'Optional' },
-            { key: 'calories', label: 'Calories (kcal/100g) *',  type: 'number', placeholder: '0' },
-            { key: 'protein',  label: 'Protein (g/100g)',        type: 'number', placeholder: '0' },
-            { key: 'carbs',    label: 'Carbs (g/100g)',          type: 'number', placeholder: '0' },
-            { key: 'fat',      label: 'Fat (g/100g)',            type: 'number', placeholder: '0' },
-          ].map(field => (
+          <p className="text-slate-400 text-sm">{t.log_custom_subtitle}</p>
+          {customFields.map(field => (
             <div key={field.key}>
               <label className="text-sm text-slate-400 block mb-1">{field.label}</label>
               <input
@@ -328,14 +333,14 @@ export default function LogFoodScreen({ onDone }: Props) {
             className={`w-full py-3 rounded-xl font-semibold transition
               ${cfSaved ? 'bg-green-700 text-green-200' : 'bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white'}`}
           >
-            {cfSaved ? '✓ Saved!' : 'Save to My Foods'}
+            {cfSaved ? t.log_saved : t.log_save_custom}
           </button>
 
           {customFoods && customFoods.filter(f => f.source === 'custom').length > 0 && (
             <div className="space-y-2 pt-2">
-              <p className="text-slate-500 text-xs uppercase tracking-wide font-semibold">My Foods</p>
+              <p className="text-slate-500 text-xs uppercase tracking-wide font-semibold">{t.log_my_foods_label}</p>
               {customFoods.filter(f => f.source === 'custom').map(f => (
-                <ProductCard key={f.id} p={toFoodItem(f)} onAdd={p => setPending(p)} />
+                <ProductCard key={f.id} p={toFoodItem(f, myFoodsLabel)} onAdd={p => setPending(p)} />
               ))}
             </div>
           )}

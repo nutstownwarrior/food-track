@@ -26,20 +26,20 @@ export interface FoodSource {
   label: string
   /** Whether this source needs an API key to function */
   requiresApiKey: boolean
-  search(query: string, apiKey?: string): Promise<FoodResult[]>
-  lookupBarcode?(barcode: string, apiKey?: string): Promise<FoodResult | null>
+  search(query: string, apiKey?: string, language?: 'en' | 'de'): Promise<FoodResult[]>
+  lookupBarcode?(barcode: string, apiKey?: string, language?: 'en' | 'de'): Promise<FoodResult | null>
 }
 
 // ─── Source registry ──────────────────────────────────────────────────────────
 
 import { offSource } from './sources/openfoodfacts-source'
 import { usdaSource } from './sources/usda-source'
-// To add BLS later:  import { blsSource } from './sources/bls-source'
+import { blsSource } from './sources/bls-source'
 
 const ALL_SOURCES: FoodSource[] = [
   offSource,
   usdaSource,
-  // blsSource,
+  blsSource,
 ]
 
 export function getAllSources(): FoodSource[] {
@@ -51,6 +51,8 @@ export function getAllSources(): FoodSource[] {
 export interface SearchOptions {
   /** Map of sourceId → apiKey */
   apiKeys?: Record<string, string>
+  /** UI language — passed to sources that support localised results */
+  language?: 'en' | 'de'
 }
 
 /**
@@ -63,7 +65,7 @@ export async function searchAll(query: string, options: SearchOptions = {}): Pro
     ALL_SOURCES.map(source => {
       const key = options.apiKeys?.[source.id]
       if (source.requiresApiKey && !key) return Promise.resolve([])
-      return source.search(query, key)
+      return source.search(query, key, options.language)
     })
   )
 
@@ -71,56 +73,16 @@ export async function searchAll(query: string, options: SearchOptions = {}): Pro
   return rankResults(flat, query)
 }
 
-/**
- * Score a food name against the query so that closer matches sort first.
- *
- * USDA names are in inverted form: "Apples, Raw, Without Skin"
- * The primary food concept is always before the first comma, so we extract
- * and score that separately at a higher tier.
- *
- * Score tiers (higher = better):
- *  50  exact match (whole name or primary term)
- *  40  primary term exactly equals query (e.g. "Apples, Raw" for "apple")
- *  30  primary term starts with query word ("Apple Juice" primary = "apple juice")
- *  20  query is a whole word at the start of the full name
- *  10  query is a whole word anywhere in the full name
- *   0  substring fallback
- */
-function scoreResult(name: string, query: string): number {
-  const n = name.toLowerCase().trim()
-  const q = query.toLowerCase().trim()
-
-  // Primary term = everything before the first comma ("Apples" from "Apples, Raw, ...")
-  const primary = n.split(',')[0].trim()
-
-  // Basic stemmer: apple↔apples, berry↔berries, etc.
-  const stem = (s: string) => s.replace(/ies\b/, 'y').replace(/s\b/, '')
-  const qStem = stem(q)
-
-  const exactMatch  = (s: string) => s === q || stem(s) === qStem
-  const prefixMatch = (s: string) => s.startsWith(q + ' ') || s.startsWith(q + ',') || stem(s).startsWith(qStem + ' ')
-  const wordMatch   = (s: string) => new RegExp(`\\b${escRe(q)}(s|es|ies)?\\b`).test(s)
-  const startMatch  = (s: string) => new RegExp(`^${escRe(q)}`).test(s)
-
-  if (exactMatch(n) || exactMatch(primary)) return 50
-  if (prefixMatch(primary) || startMatch(primary) && wordMatch(primary)) return 40
-  if (prefixMatch(n) || startMatch(n)) return 30
-  if (wordMatch(primary)) return 20
-  if (wordMatch(n)) return 10
-  return 0
-}
-
-function escRe(s: string) {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
+import { scoreAgainstQuery } from './fuzzy'
 
 function rankResults(results: FoodResult[], query: string): FoodResult[] {
-  return [...results].sort((a, b) => {
-    const diff = scoreResult(b.name, query) - scoreResult(a.name, query)
-    if (diff !== 0) return diff
-    // Within the same tier: shorter names first (more generic)
-    return a.name.length - b.name.length
-  })
+  // BLS results are already sorted by the local scorer; re-score everything
+  // so that API results (USDA, OFF) are also ranked consistently.
+  return [...results]
+    .map(r => ({ r, score: scoreAgainstQuery(query, r.name) }))
+    .filter(({ score }) => score > 0)
+    .sort((a, b) => b.score - a.score)
+    .map(({ r }) => r)
 }
 
 export async function lookupBarcodeAll(barcode: string, options: SearchOptions = {}): Promise<FoodResult | null> {
@@ -129,7 +91,7 @@ export async function lookupBarcodeAll(barcode: string, options: SearchOptions =
     const key = options.apiKeys?.[source.id]
     if (source.requiresApiKey && !key) continue
     try {
-      const result = await source.lookupBarcode(barcode, key)
+      const result = await source.lookupBarcode(barcode, key, options.language)
       if (result) return result
     } catch {
       // try next source
