@@ -19,7 +19,7 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-dvh max-w-lg mx-auto relative">
-      <main className="flex-1 overflow-y-auto pb-20">
+      <main className="flex-1 overflow-y-auto pb-20 safe-top">
         {screen === 'today'    && <TodayScreen   navigate={navigate} />}
         {screen === 'log'      && <LogFoodScreen  date={logDate} onDone={() => navigate('today')} />}
         {screen === 'camera'   && <CameraScreen   onDone={() => navigate('today')} />}
