@@ -82,15 +82,17 @@ export default function SettingsScreen() {
         <h2 className="font-semibold text-slate-300">{t.settings_goals}</h2>
         {goalFields.map(field => (
           <div key={field.key} className="flex items-center gap-3 bg-slate-800 rounded-xl px-4 py-3">
-            <span className={`font-medium w-28 ${field.color}`}>{field.label}</span>
-            <input
-              type="number"
-              value={goals[field.key as keyof typeof goals]}
-              onChange={e => setGoals(prev => ({ ...prev, [field.key]: e.target.value }))}
-              className="flex-1 bg-slate-700 rounded-lg px-3 py-2 text-right outline-none focus:ring-2 focus:ring-green-500"
-              min="0"
-            />
-            <span className="text-slate-400 w-8 text-right text-sm">{field.unit}</span>
+            <span className={`font-medium flex-1 ${field.color}`}>{field.label}</span>
+            <div className="flex items-center gap-2 shrink-0">
+              <input
+                type="number"
+                value={goals[field.key as keyof typeof goals]}
+                onChange={e => setGoals(prev => ({ ...prev, [field.key]: e.target.value }))}
+                className="w-24 bg-slate-700 rounded-lg px-3 py-2 text-right outline-none focus:ring-2 focus:ring-green-500"
+                min="0"
+              />
+              <span className="text-slate-400 text-sm w-8">{field.unit}</span>
+            </div>
           </div>
         ))}
       </section>
