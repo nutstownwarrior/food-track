@@ -88,9 +88,10 @@ function QuantityModal({ item, onConfirm, onCancel }: QuantityModalProps) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/70 z-50 flex items-end justify-center" onClick={onCancel}>
+    <div className="fixed inset-0 bg-black/70 z-[100] flex items-end justify-center" onClick={onCancel}>
       <div
-        className="w-full max-w-lg bg-slate-800 rounded-t-2xl p-6 space-y-4"
+        className="w-full max-w-lg bg-slate-800 rounded-t-2xl p-6 pb-safe space-y-4"
+        style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 1.5rem)' }}
         onClick={e => e.stopPropagation()}
       >
         <div>

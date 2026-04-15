@@ -18,7 +18,7 @@ export default function BottomNav({ current, navigate }: Props) {
   ]
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-slate-800 border-t border-slate-700 safe-bottom z-50">
+    <nav className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-slate-800 border-t border-slate-700 safe-bottom z-40">
       <div className="flex">
         {tabs.map(tab => (
           <button
