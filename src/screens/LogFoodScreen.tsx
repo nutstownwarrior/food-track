@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react'
-import { db, addLogEntry, getSetting } from '../lib/db'
+import { db, addLogEntry, getSetting, getGeminiKey } from '../lib/db'
 import { searchAll, lookupBarcodeAll, type FoodResult } from '../lib/search'
+import { estimateFromText, DEFAULT_MODEL, type GeminiEstimate } from '../lib/gemini'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useI18n } from '../lib/i18n'
 import type { Food } from '../lib/db'
@@ -10,7 +11,7 @@ interface Props {
   onDone: () => void
 }
 
-type Tab = 'search' | 'custom'
+type Tab = 'search' | 'custom' | 'chat'
 
 const SOURCE_COLORS: Record<string, string> = {
   'OpenFoodFacts': 'bg-orange-900/60 text-orange-300',
@@ -205,6 +206,12 @@ export default function LogFoodScreen({ onDone }: Props) {
 
   const [cf, setCf] = useState({ name: '', brand: '', calories: '', protein: '', carbs: '', fat: '' })
 
+  // Chat tab state
+  const [chatInput, setChatInput]       = useState('')
+  const [chatLoading, setChatLoading]   = useState(false)
+  const [chatError, setChatError]       = useState('')
+  const [chatItems, setChatItems]       = useState<(GeminiEstimate & { selected: boolean })[]>([])
+
   const customFoods = useLiveQuery(() => db.foods.orderBy('name').toArray(), [])
 
   const myFoodsLabel = t.log_my_foods_label
@@ -297,6 +304,47 @@ export default function LogFoodScreen({ onDone }: Props) {
     setTimeout(() => setCfSaved(false), 2000)
   }
 
+  async function handleChatAsk() {
+    if (!chatInput.trim()) return
+    setChatLoading(true)
+    setChatError('')
+    setChatItems([])
+    try {
+      const [apiKey, model] = await Promise.all([
+        getGeminiKey(),
+        getSetting('gemini_model').then(v => String(v || DEFAULT_MODEL)),
+      ])
+      const results = await estimateFromText(apiKey, chatInput.trim(), lang, model)
+      if (results.length === 0) {
+        setChatError(t.log_chat_no_results)
+      } else {
+        setChatItems(results.map(r => ({ ...r, selected: true })))
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setChatError(msg.includes('No Gemini') ? t.log_chat_no_key : t.log_chat_failed)
+    } finally {
+      setChatLoading(false)
+    }
+  }
+
+  async function handleChatLog() {
+    const selected = chatItems.filter(e => e.selected && e.quantity_g > 0)
+    for (const item of selected) {
+      await addLogEntry({
+        food_name: item.name,
+        calories_per_100g: item.calories_per_100g,
+        protein_per_100g: item.protein_per_100g,
+        carbs_per_100g: item.carbs_per_100g,
+        fat_per_100g: item.fat_per_100g,
+        quantity_g: item.quantity_g,
+        source: 'ai',
+        ai_note: `AI chat: ${item.quantity_desc}`,
+      })
+    }
+    onDone()
+  }
+
   const localMatches = query.trim()
     ? (customFoods ?? []).filter(f => f.name.toLowerCase().includes(query.toLowerCase()))
     : []
@@ -318,14 +366,14 @@ export default function LogFoodScreen({ onDone }: Props) {
       </div>
 
       <div className="flex bg-slate-800 rounded-xl p-1 gap-1">
-        {(['search', 'custom'] as Tab[]).map(tab_ => (
+        {(['search', 'chat', 'custom'] as Tab[]).map(tab_ => (
           <button
             key={tab_}
             onClick={() => setTab(tab_)}
             className={`flex-1 py-2 rounded-lg text-sm font-semibold transition
               ${tab === tab_ ? 'bg-green-600 text-white' : 'text-slate-400'}`}
           >
-            {tab_ === 'search' ? t.log_tab_search : t.log_tab_custom}
+            {tab_ === 'search' ? t.log_tab_search : tab_ === 'chat' ? t.log_tab_chat : t.log_tab_custom}
           </button>
         ))}
       </div>
@@ -411,6 +459,87 @@ export default function LogFoodScreen({ onDone }: Props) {
               {customFoods.filter(f => f.source === 'custom').map(f => (
                 <ProductCard key={f.id} p={toFoodItem(f, myFoodsLabel)} onAdd={p => setPending(p)} />
               ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {tab === 'chat' && (
+        <div className="space-y-3">
+          <p className="text-slate-400 text-sm">{t.log_chat_subtitle}</p>
+
+          <div className="flex gap-2">
+            <textarea
+              rows={3}
+              placeholder={t.log_chat_placeholder}
+              value={chatInput}
+              onChange={e => setChatInput(e.target.value)}
+              className="flex-1 bg-slate-800 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-green-500 resize-none"
+            />
+          </div>
+          <button
+            onClick={handleChatAsk}
+            disabled={chatLoading || !chatInput.trim()}
+            className="w-full bg-green-600 hover:bg-green-500 disabled:opacity-50 py-3 rounded-xl font-semibold transition"
+          >
+            {chatLoading ? t.log_chat_loading : t.log_chat_go}
+          </button>
+
+          {chatError && <p className="text-red-400 text-sm">{chatError}</p>}
+
+          {chatItems.length > 0 && (
+            <div className="space-y-3">
+              <p className="text-slate-400 text-sm font-semibold">{t.log_chat_review}</p>
+              {chatItems.map((item, i) => {
+                const cal = Math.round(item.calories_per_100g * item.quantity_g / 100)
+                return (
+                  <div
+                    key={i}
+                    onClick={() => setChatItems(prev => prev.map((e, idx) => idx === i ? { ...e, selected: !e.selected } : e))}
+                    className={`bg-slate-800 rounded-xl px-4 py-3 border-2 cursor-pointer transition
+                      ${item.selected ? 'border-green-500' : 'border-transparent opacity-50'}`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1">
+                        <p className="font-medium">{item.name}</p>
+                        <p className="text-xs text-slate-400 mb-1">{item.quantity_desc}</p>
+                        <p className="text-xs text-slate-400">
+                          {item.calories_per_100g} kcal/100g · P {item.protein_per_100g}g · C {item.carbs_per_100g}g · F {item.fat_per_100g}g
+                        </p>
+                      </div>
+                      <p className="text-green-400 font-bold shrink-0">{cal} kcal</p>
+                    </div>
+                    <div className="mt-2 flex items-center gap-2" onClick={e => e.stopPropagation()}>
+                      <label className="text-xs text-slate-400">g:</label>
+                      <input
+                        type="number"
+                        value={item.quantity_g}
+                        onChange={e => {
+                          const v = Number(e.target.value)
+                          setChatItems(prev => prev.map((el, idx) => idx === i ? { ...el, quantity_g: isNaN(v) ? el.quantity_g : v } : el))
+                        }}
+                        className="w-20 bg-slate-700 rounded-lg px-2 py-1 text-sm text-center"
+                        min="1"
+                      />
+                    </div>
+                  </div>
+                )
+              })}
+              <div className="flex gap-2">
+                <button
+                  onClick={() => { setChatItems([]); setChatInput('') }}
+                  className="flex-1 bg-slate-700 hover:bg-slate-600 py-3 rounded-xl text-sm font-semibold transition"
+                >
+                  {t.log_chat_try_again}
+                </button>
+                <button
+                  onClick={handleChatLog}
+                  disabled={chatItems.filter(e => e.selected).length === 0}
+                  className="flex-1 bg-green-600 hover:bg-green-500 disabled:opacity-50 py-3 rounded-xl font-semibold transition"
+                >
+                  {t.log_chat_log(chatItems.filter(e => e.selected).length)}
+                </button>
+              </div>
             </div>
           )}
         </div>
