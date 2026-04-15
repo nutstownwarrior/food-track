@@ -8,7 +8,7 @@ export interface GeminiEstimate {
   fat_per_100g: number
 }
 
-const MODEL = 'gemini-3-flash-preview'
+export const DEFAULT_MODEL = 'gemini-3-flash-preview'
 const API_BASE = 'https://generativelanguage.googleapis.com/v1beta'
 
 const PROMPTS: Record<string, string> = {
@@ -43,7 +43,8 @@ export async function estimateFromImage(
   apiKey: string,
   imageBase64: string,
   mimeType: string,
-  language = 'en'
+  language = 'en',
+  model = DEFAULT_MODEL
 ): Promise<GeminiEstimate[]> {
   if (!apiKey) throw new Error('No Gemini API key configured. Add it in Settings.')
 
@@ -64,7 +65,7 @@ export async function estimateFromImage(
     }
   }
 
-  const res = await fetch(`${API_BASE}/models/${MODEL}:generateContent?key=${apiKey}`, {
+  const res = await fetch(`${API_BASE}/models/${model}:generateContent?key=${apiKey}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),

@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
-import { estimateFromImage, fileToBase64, type GeminiEstimate } from '../lib/gemini'
-import { getGeminiKey, addLogEntry } from '../lib/db'
+import { estimateFromImage, fileToBase64, DEFAULT_MODEL, type GeminiEstimate } from '../lib/gemini'
+import { getGeminiKey, getSetting, addLogEntry } from '../lib/db'
 import { useI18n } from '../lib/i18n'
 
 interface Props {
@@ -34,9 +34,12 @@ export default function CameraScreen({ onDone }: Props) {
     setLoading(true)
     setError('')
     try {
-      const apiKey = await getGeminiKey()
+      const [apiKey, model] = await Promise.all([
+        getGeminiKey(),
+        getSetting('gemini_model').then(v => String(v || DEFAULT_MODEL)),
+      ])
       const { base64, mimeType } = await fileToBase64(file)
-      const results = await estimateFromImage(apiKey, base64, mimeType, lang)
+      const results = await estimateFromImage(apiKey, base64, mimeType, lang, model)
       if (results.length === 0) {
         setError(t.cam_no_food)
       } else {

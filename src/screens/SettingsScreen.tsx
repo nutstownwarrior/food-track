@@ -1,22 +1,25 @@
 import { useState, useEffect } from 'react'
 import { getSetting, setSetting, DEFAULT_GOALS } from '../lib/db'
+import { DEFAULT_MODEL } from '../lib/gemini'
 import { useI18n, type Lang } from '../lib/i18n'
 
 export default function SettingsScreen() {
   const { t, lang, setLang } = useI18n()
   const [goals, setGoals]       = useState({ calories: '', protein: '', carbs: '', fat: '' })
-  const [geminiKey, setGeminiKey] = useState('')
-  const [usdaKey, setUsdaKey]   = useState('')
+  const [geminiKey, setGeminiKey]     = useState('')
+  const [geminiModel, setGeminiModel] = useState('')
+  const [usdaKey, setUsdaKey]         = useState('')
   const [saved, setSaved]       = useState(false)
 
   useEffect(() => {
     async function load() {
-      const [cal, pro, carb, fat, gemini, usda] = await Promise.all([
+      const [cal, pro, carb, fat, gemini, geminiMdl, usda] = await Promise.all([
         getSetting('goal_calories'),
         getSetting('goal_protein'),
         getSetting('goal_carbs'),
         getSetting('goal_fat'),
         getSetting('gemini_api_key'),
+        getSetting('gemini_model'),
         getSetting('usda_api_key'),
       ])
       setGoals({
@@ -26,6 +29,7 @@ export default function SettingsScreen() {
         fat:      String(fat  ?? DEFAULT_GOALS.fat),
       })
       setGeminiKey(String(gemini ?? ''))
+      setGeminiModel(String(geminiMdl ?? ''))
       setUsdaKey(String(usda ?? ''))
     }
     load()
@@ -38,6 +42,7 @@ export default function SettingsScreen() {
       setSetting('goal_carbs',     Number(goals.carbs)    || DEFAULT_GOALS.carbs),
       setSetting('goal_fat',       Number(goals.fat)      || DEFAULT_GOALS.fat),
       setSetting('gemini_api_key', geminiKey.trim()),
+      setSetting('gemini_model',   geminiModel.trim()),
       setSetting('usda_api_key',   usdaKey.trim()),
     ])
     setSaved(true)
@@ -144,6 +149,16 @@ export default function SettingsScreen() {
               value={geminiKey}
               onChange={e => setGeminiKey(e.target.value)}
               placeholder={t.settings_gemini_ph}
+              className="w-full bg-slate-700 rounded-xl px-4 py-3 font-mono text-sm outline-none focus:ring-2 focus:ring-green-500"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-slate-400 block mb-1">{t.settings_gemini_model}</label>
+            <input
+              type="text"
+              value={geminiModel}
+              onChange={e => setGeminiModel(e.target.value)}
+              placeholder={DEFAULT_MODEL}
               className="w-full bg-slate-700 rounded-xl px-4 py-3 font-mono text-sm outline-none focus:ring-2 focus:ring-green-500"
             />
           </div>
