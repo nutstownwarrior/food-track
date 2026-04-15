@@ -63,10 +63,28 @@ interface QuantityModalProps {
   onCancel: () => void
 }
 
+function useKeyboardOffset() {
+  const [offset, setOffset] = useState(0)
+  useEffect(() => {
+    const vv = window.visualViewport
+    if (!vv) return
+    const update = () => {
+      // Distance the keyboard pushes up from the bottom of the window
+      const kb = Math.max(0, window.innerHeight - vv.height - vv.offsetTop)
+      setOffset(kb)
+    }
+    vv.addEventListener('resize', update)
+    vv.addEventListener('scroll', update)
+    return () => { vv.removeEventListener('resize', update); vv.removeEventListener('scroll', update) }
+  }, [])
+  return offset
+}
+
 function QuantityModal({ item, onConfirm, onCancel }: QuantityModalProps) {
   const { t } = useI18n()
   const [qty, setQty] = useState('100')
   const inputRef = useRef<HTMLInputElement>(null)
+  const kbOffset = useKeyboardOffset()
   useEffect(() => { inputRef.current?.focus(); inputRef.current?.select() }, [])
 
   const g   = Number(qty)
@@ -74,7 +92,11 @@ function QuantityModal({ item, onConfirm, onCancel }: QuantityModalProps) {
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-end z-50" onClick={onCancel}>
-      <div className="w-full max-w-lg mx-auto bg-slate-800 rounded-t-2xl p-6 space-y-4" onClick={e => e.stopPropagation()}>
+      <div
+        className="w-full max-w-lg mx-auto bg-slate-800 rounded-t-2xl p-6 space-y-4 transition-[margin] duration-100"
+        style={{ marginBottom: kbOffset }}
+        onClick={e => e.stopPropagation()}
+      >
         <div>
           <h3 className="font-bold text-lg truncate">{item.name}</h3>
           {item.brand && <p className="text-sm text-slate-400">{item.brand}</p>}
