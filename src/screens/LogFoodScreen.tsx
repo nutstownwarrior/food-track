@@ -66,16 +66,21 @@ interface QuantityModalProps {
 function useKeyboardOffset() {
   const [offset, setOffset] = useState(0)
   useEffect(() => {
-    const vv = window.visualViewport
-    if (!vv) return
     const update = () => {
-      // Distance the keyboard pushes up from the bottom of the window
-      const kb = Math.max(0, window.innerHeight - vv.height - vv.offsetTop)
-      setOffset(kb)
+      const vv = window.visualViewport
+      if (vv) {
+        setOffset(Math.max(0, window.innerHeight - vv.height - vv.offsetTop))
+      }
     }
-    vv.addEventListener('resize', update)
-    vv.addEventListener('scroll', update)
-    return () => { vv.removeEventListener('resize', update); vv.removeEventListener('scroll', update) }
+    window.visualViewport?.addEventListener('resize', update)
+    window.visualViewport?.addEventListener('scroll', update)
+    // Fallback for browsers without visualViewport support
+    window.addEventListener('resize', update)
+    return () => {
+      window.visualViewport?.removeEventListener('resize', update)
+      window.visualViewport?.removeEventListener('scroll', update)
+      window.removeEventListener('resize', update)
+    }
   }, [])
   return offset
 }
@@ -91,10 +96,12 @@ function QuantityModal({ item, onConfirm, onCancel }: QuantityModalProps) {
   const cal = g > 0 ? Math.round(item.calories_per_100g * g / 100) : 0
 
   return (
-    <div className="fixed inset-0 bg-black/70 flex items-end z-50" onClick={onCancel}>
+    // Backdrop — full screen, tap outside to close
+    <div className="fixed inset-0 bg-black/70 z-50" onClick={onCancel}>
+      {/* Sheet — positioned directly with bottom so it sits above the keyboard */}
       <div
-        className="w-full max-w-lg mx-auto bg-slate-800 rounded-t-2xl p-6 space-y-4 transition-[margin] duration-100"
-        style={{ marginBottom: kbOffset }}
+        className="fixed left-0 right-0 max-w-lg mx-auto bg-slate-800 rounded-t-2xl p-6 space-y-4"
+        style={{ bottom: kbOffset, transition: 'bottom 120ms ease-out' }}
         onClick={e => e.stopPropagation()}
       >
         <div>
