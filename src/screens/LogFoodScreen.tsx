@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef } from 'react'
 import { db, addLogEntry, getSetting } from '../lib/db'
 import { searchAll, lookupBarcodeAll, type FoodResult } from '../lib/search'
 import { useLiveQuery } from 'dexie-react-hooks'
@@ -63,62 +63,100 @@ interface QuantityModalProps {
   onCancel: () => void
 }
 
-function useKeyboardOffset() {
-  const [offset, setOffset] = useState(0)
-  useEffect(() => {
-    const update = () => {
-      const vv = window.visualViewport
-      if (vv) {
-        setOffset(Math.max(0, window.innerHeight - vv.height - vv.offsetTop))
-      }
-    }
-    window.visualViewport?.addEventListener('resize', update)
-    window.visualViewport?.addEventListener('scroll', update)
-    // Fallback for browsers without visualViewport support
-    window.addEventListener('resize', update)
-    return () => {
-      window.visualViewport?.removeEventListener('resize', update)
-      window.visualViewport?.removeEventListener('scroll', update)
-      window.removeEventListener('resize', update)
-    }
-  }, [])
-  return offset
-}
+
+const PRESETS = [50, 100, 150, 200, 300]
 
 function QuantityModal({ item, onConfirm, onCancel }: QuantityModalProps) {
   const { t } = useI18n()
-  const [qty, setQty] = useState('100')
+  const [qty, setQty] = useState(100)
+  const [editing, setEditing] = useState(false)
+  const [raw, setRaw] = useState('100')
   const inputRef = useRef<HTMLInputElement>(null)
-  const kbOffset = useKeyboardOffset()
-  useEffect(() => { inputRef.current?.focus(); inputRef.current?.select() }, [])
 
-  const g   = Number(qty)
+  const g   = qty
   const cal = g > 0 ? Math.round(item.calories_per_100g * g / 100) : 0
 
+  function step(delta: number) {
+    setQty(prev => Math.max(1, prev + delta))
+  }
+
+  function commitEdit() {
+    const v = parseInt(raw, 10)
+    if (!isNaN(v) && v > 0) setQty(v)
+    else setRaw(String(qty))
+    setEditing(false)
+  }
+
   return (
-    // Backdrop — full screen, tap outside to close
-    <div className="fixed inset-0 bg-black/70 z-50" onClick={onCancel}>
-      {/* Sheet — positioned directly with bottom so it sits above the keyboard */}
+    <div className="fixed inset-0 bg-black/70 z-50 flex items-end justify-center" onClick={onCancel}>
       <div
-        className="fixed left-0 right-0 max-w-lg mx-auto bg-slate-800 rounded-t-2xl p-6 space-y-4"
-        style={{ bottom: kbOffset, transition: 'bottom 120ms ease-out' }}
+        className="w-full max-w-lg bg-slate-800 rounded-t-2xl p-6 space-y-4"
         onClick={e => e.stopPropagation()}
       >
         <div>
           <h3 className="font-bold text-lg truncate">{item.name}</h3>
           {item.brand && <p className="text-sm text-slate-400">{item.brand}</p>}
         </div>
-        <div>
-          <label className="text-sm text-slate-400 block mb-1">{t.log_qty_label}</label>
-          <input
-            ref={inputRef}
-            type="number"
-            value={qty}
-            onChange={e => setQty(e.target.value)}
-            className="w-full bg-slate-700 rounded-xl px-4 py-3 text-lg font-semibold text-center"
-            min="1"
-          />
+
+        {/* Preset chips */}
+        <div className="flex gap-2 flex-wrap">
+          {PRESETS.map(p => (
+            <button
+              key={p}
+              onClick={() => { setQty(p); setEditing(false) }}
+              className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition
+                ${qty === p ? 'bg-green-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}
+            >
+              {p}g
+            </button>
+          ))}
         </div>
+
+        {/* Stepper row */}
+        <div>
+          <label className="text-sm text-slate-400 block mb-2">{t.log_qty_label}</label>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => step(-10)}
+              className="w-12 h-12 bg-slate-700 hover:bg-slate-600 rounded-xl text-xl font-bold transition"
+            >−</button>
+            <button
+              onClick={() => step(-1)}
+              className="w-10 h-10 bg-slate-700 hover:bg-slate-600 rounded-xl text-sm font-bold transition"
+            >-1</button>
+
+            {editing ? (
+              <input
+                ref={inputRef}
+                type="number"
+                value={raw}
+                onChange={e => setRaw(e.target.value)}
+                onBlur={commitEdit}
+                onKeyDown={e => e.key === 'Enter' && commitEdit()}
+                className="flex-1 bg-slate-700 rounded-xl px-3 py-2 text-xl font-bold text-center outline-none focus:ring-2 focus:ring-green-500"
+                min="1"
+                autoFocus
+              />
+            ) : (
+              <button
+                onClick={() => { setRaw(String(qty)); setEditing(true) }}
+                className="flex-1 bg-slate-700 rounded-xl px-3 py-2 text-xl font-bold text-center"
+              >
+                {qty}g
+              </button>
+            )}
+
+            <button
+              onClick={() => step(1)}
+              className="w-10 h-10 bg-slate-700 hover:bg-slate-600 rounded-xl text-sm font-bold transition"
+            >+1</button>
+            <button
+              onClick={() => step(10)}
+              className="w-12 h-12 bg-slate-700 hover:bg-slate-600 rounded-xl text-xl font-bold transition"
+            >+</button>
+          </div>
+        </div>
+
         {g > 0 && (
           <p className="text-center text-slate-300">
             <span className="text-2xl font-bold text-green-400">{cal}</span> kcal ·
@@ -127,6 +165,7 @@ function QuantityModal({ item, onConfirm, onCancel }: QuantityModalProps) {
             F {Math.round(item.fat_per_100g * g / 100)}g
           </p>
         )}
+
         <div className="flex gap-3">
           <button onClick={onCancel} className="flex-1 bg-slate-700 py-3 rounded-xl font-semibold">{t.log_cancel}</button>
           <button
